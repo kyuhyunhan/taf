@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Memory sync for a forge. sync_mode controls behavior:
+#   git       — no-op (memory tracked in taf repo). Default.
+#   pull-only — aws s3 sync $s3_uri ./memory/ --delete.
+# Usage: forge-sync-memory <product>
+set -euo pipefail
+
+# Self-locate when $TAF_ROOT not set in env.
+if [[ -z "${TAF_ROOT:-}" ]]; then
+  SCRIPT="$0"
+  while [[ -L "$SCRIPT" ]]; do
+    _DIR="$(cd -P "$(dirname "$SCRIPT")" && pwd)"
+    SCRIPT="$(readlink "$SCRIPT")"
+    [[ "$SCRIPT" != /* ]] && SCRIPT="$_DIR/$SCRIPT"
+  done
+  TAF_ROOT="$(cd -P "$(dirname "$SCRIPT")/.." && pwd)"
+fi
+
+PRODUCT="${1:-}"
+if [[ -z "$PRODUCT" ]]; then
+  echo "Usage: forge-sync-memory <product>" >&2
+  exit 2
+fi
+
+FORGE_DIR="$TAF_ROOT/forges/$PRODUCT"
+PROFILE="$FORGE_DIR/profile.yaml"
+
+if [[ ! -f "$PROFILE" ]]; then
+  echo "No forge at $FORGE_DIR (run forge-init $PRODUCT first)" >&2
+  exit 1
+fi
+
+# Minimal yaml field extraction (no yq dependency).
+_yaml_field() {
+  awk -v key="$1" '
+    $0 ~ "^[[:space:]]*"key":" {
+      sub(/^[^:]*:[[:space:]]*/, "")
+      sub(/[[:space:]]*#.*$/, "")
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "")
+      print
+      exit
+    }
+  ' "$2"
+}
+S3_URI="$(_yaml_field s3_uri "$PROFILE")"
+SYNC_MODE="$(_yaml_field sync_mode "$PROFILE")"
+
+# Dispatch on sync_mode FIRST — `git` mode is a deliberate no-op and
+# should never reach the S3 path. `pull-only` falls through.
+case "$SYNC_MODE" in
+  git)
+    echo "[forge-sync-memory] sync_mode=git — memory is git-tracked under \$TAF_ROOT/forges/$PRODUCT/memory/." >&2
+    echo "[forge-sync-memory] To update memory on this machine: cd \"\$TAF_ROOT\" && git pull." >&2
+    exit 0
+    ;;
+  pull-only)
+    : # fall through to S3 pull below
+    ;;
+  "")
+    echo "[forge-sync-memory] sync_mode not set in $PROFILE; refusing to guess. Set sync_mode: git | pull-only." >&2
+    exit 1
+    ;;
+  *)
+    echo "Unsupported sync_mode: '$SYNC_MODE' (expected: git | pull-only)" >&2
+    exit 1
+    ;;
+esac
+
+if [[ -z "$S3_URI" ]]; then
+  echo "[forge-sync-memory] s3_uri not set in $PROFILE; skipping sync. Memory unchanged." >&2
+  exit 0
+fi
+
+LOCAL="$FORGE_DIR/memory/"
+
+if ! command -v aws >/dev/null 2>&1; then
+  echo "[forge-sync-memory] aws CLI not found; skipping sync (memory unchanged)." >&2
+  exit 0
+fi
+
+echo "[forge-sync-memory] Pulling $S3_URI -> $LOCAL ..."
+if aws s3 sync "$S3_URI" "$LOCAL" --delete; then
+  date -u +%FT%TZ > "$FORGE_DIR/.last-sync"
+  echo "[forge-sync-memory] Synced. Timestamp: $(cat "$FORGE_DIR/.last-sync")"
+else
+  rc=$?
+  echo "[forge-sync-memory] aws s3 sync failed (rc=$rc); bucket may not exist yet. Memory unchanged." >&2
+  exit 0
+fi

@@ -1,0 +1,32 @@
+# {{product}} forge
+
+This directory is a **forge** for the product `{{product}}`.
+
+- Workdir: `{{workdir}}`
+- Memory:  `./memory/` (pull-synced from `{{s3_uri}}`)
+- Master:  `.claude/agents/{{product}}-master.md`
+- Profile: `./profile.yaml`
+
+This directory is private. Do not commit it. Do not place any of its
+contents into `{{workdir}}`. The product remains unaware of the forge.
+
+## Two ways to use this forge
+
+**In-session bind (default):**
+From any Claude Code session, in any cwd, run `/forge {{product}}`.
+The slash command pulls memory, loads the master persona, and adopts
+it for the rest of the session.
+
+**Launcher fallback:**
+`cd` into this directory and run `claude`. The project-level
+`.claude/settings.json` here grants workdir permissions and runs a
+SessionStart memory sync. The master agent is still a `taa`-discovered
+persona; this directory does not redefine sub-agents.
+
+## What may not happen here
+
+- No sub-agent definitions. Sub-agents are `taa` journeymen.
+- No writes into `{{workdir}}` without explicit user approval per change.
+- No commits of this directory anywhere.
+
+See `ta-set/taf/ETHOS.md` for the full forge concept.

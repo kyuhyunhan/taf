@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Install taf scaffolding on this machine:
+#   - symlink /forge slash command into ~/.claude/commands/
+#   - print the export lines to add to the user's shell rc
+#
+# taf no longer creates ~/.taf/. Forge content lives in this repo
+# under forges/<product>/; scripts/ goes on PATH directly via TAF_ROOT.
+set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+CLAUDE_COMMANDS_DIR="${HOME}/.claude/commands"
+
+mkdir -p "$CLAUDE_COMMANDS_DIR"
+ln -sf "$REPO_DIR/commands/forge.md" "$CLAUDE_COMMANDS_DIR/forge.md"
+
+for s in forge-init forge-sync-memory forge-list; do
+  chmod +x "$REPO_DIR/scripts/$s"
+done
+
+cat <<EOF
+taf installed.
+
+  /forge command  -> $CLAUDE_COMMANDS_DIR/forge.md
+  scripts         -> $REPO_DIR/scripts/
+  forges          -> $REPO_DIR/forges/
+
+Add these two lines to your shell profile (~/.zshrc or ~/.bashrc):
+
+  export TAF_ROOT="$REPO_DIR"
+  export PATH="\$TAF_ROOT/scripts:\$PATH"
+
+Then reload (\`source ~/.zshrc\`) and confirm:
+
+  echo \$TAF_ROOT
+  forge-list
+
+Next: forge-init <product> --workdir <abs-path>
+EOF

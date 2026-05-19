@@ -1,0 +1,82 @@
+# Lexio Skill Resolution
+#
+# Master invokes 3 skills directly via slash command (master_skills
+# section). All other skills are attached to sub-agents at dispatch
+# time per the `attach:` mapping below.
+#
+# The kind:/optional_kind: sub-keys resolve generic agent slots
+# (declared in taa/agents/<base>.md#requires_skills#kind:) to
+# concrete ref-skills (in tas/skills/ref-*).
+
+# ── Master-direct slash commands (informational; no attach needed) ──
+master_skills:
+  - forge-audit     # measure forge state against the 4-axis rubric
+  - forge-harden    # process holds meta-loop
+  - forge-memory    # surface session candidates + write atomic note
+
+# ── Per-callable attach mapping ──────────────────────────────────────
+#
+# When dispatch-agent.sh dispatches a Task(<callable>, ...) call, it:
+#   1. Loads taa/agents/<base>.md (base from agents.yaml#allowed)
+#   2. Resolves the base's requires_skills against this section
+#   3. Concatenates ref/procedural skill bodies into the agent prompt
+#   4. Prepends the forge's agent-prompt-prefix.md (hard rules etc.)
+attach:
+
+  developer-client:
+    ref:
+      - ref-code-standards
+    procedural:
+      - loop-maintain
+      - loop-tdd
+    kind:
+      stack-patterns: ref-swift-patterns
+      platform-security: ref-apple-security
+
+  developer-server:
+    ref:
+      - ref-code-standards
+    procedural:
+      - loop-maintain
+      - loop-tdd
+    kind:
+      stack-patterns: ref-aws-patterns
+
+  reviewer:
+    ref:
+      - ref-code-review
+      - ref-code-standards
+    procedural:
+      - audit-diff
+    # Cross-stack review needs both stack-patterns refs
+    kind:
+      stack-patterns:
+        - ref-swift-patterns
+        - ref-aws-patterns
+    optional_kind:
+      platform-security: ref-apple-security
+
+  strategist:
+    procedural:
+      - ideate-app
+      - research-market
+      - consult-business
+      - consult-gtm
+      - consult-product
+      - consult-ux
+      - spec-prd
+
+  architect:
+    ref:
+      - ref-code-standards
+    procedural:
+      - consult-tech
+      - consult-apple
+      - spec-ac
+      - spec-tech
+      - spec-gates
+    optional:
+      - consult-ux
+      - ref-swift-patterns
+      - ref-aws-patterns
+      - ref-apple-security

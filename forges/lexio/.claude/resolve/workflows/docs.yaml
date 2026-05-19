@@ -1,0 +1,73 @@
+id: docs
+name: Memory Note — capture a durable fact as an atomic note
+description: |
+  Append a durable fact to Lexio's project memory under memory/<layer>/.
+  Notes are STRICTLY APPEND-ONLY: once written, never edited. Drafts MUST
+  be approved by the owner before writing (pre-memory-write.sh enforces
+  this via DRAFT marker detection).
+
+phases:
+
+  - id: classify
+    name: Classify
+    type: clarify
+    required: true
+    procedure:
+      - Pick a layer: client | server | cross-cutting | product.
+      - See memory/TAXONOMY.md if uncertain.
+
+  - id: id
+    name: Pick ID + slug
+    type: action
+    required: true
+    procedure:
+      - ID format YYYYMMDDTHHMM at the moment of decision/observation.
+      - Disambiguate same-minute collisions with seconds (YYYYMMDDTHHMMSS).
+      - Slug — short kebab-case noun phrase.
+      - Final path memory/<layer>/<id>-<slug>.md.
+
+  - id: draft
+    name: Draft the note
+    type: action
+    required: true
+    requires_marker: "DRAFT:"
+    procedure:
+      - Present the full content (frontmatter + body) prefixed by "DRAFT:" header.
+      - Frontmatter REQUIRED keys, id, title, when, layer, status.
+      - Frontmatter OPTIONAL keys, also_in, links (every link with a `why:`), supersedes, superseded_by, legacy_id.
+      - Body adapts to the fact, decision/observation, reasoning, source-of-truth file when applicable.
+
+  - id: approve
+    name: Owner sign-off
+    type: clarify
+    required: true
+    procedure:
+      - Wait for explicit user approval.
+      - Approval may include amendments; re-emit DRAFT with the amendments and ask again.
+
+  - id: write
+    name: Write the note
+    type: action
+    required: true
+    procedure:
+      - Write the approved content verbatim.
+      - DO NOT modify the body, frontmatter, or status after this point — ever.
+
+write_not_allowed_for:
+  - Source files under Lexio/ or server/ (those are the running system, not records).
+  - Config files (samconfig.toml, template.yaml, .swiftformat).
+  - Git history — that lives in commit messages.
+  - CLAUDE.md — references this memory, is not itself a note.
+  - Auto-memory at ~/.claude/projects/-Users-kyuhyunhan-workspaces-lexio/memory/.
+
+immutability:
+  rule: strict append-only
+  details:
+    - A note is never edited after first write.
+    - Supersession declared in the NEW note via `supersedes:`; old note's status stays as written.
+    - Reverse links never added retroactively.
+    - Retroactive cross-references → bridging note.
+
+references:
+  - $forge_root/memory/README.md
+  - $forge_root/memory/TAXONOMY.md

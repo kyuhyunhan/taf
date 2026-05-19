@@ -1,0 +1,14 @@
+id: C-008
+title: /translate endpoint (legacy) returns translation via OpenAI
+source_commit: cd0b9b5
+layer: server
+status: deprecated
+trigger: |
+  Client (or external caller) issues POST /translate with text +
+  target language.
+effect: |
+  Server calls OpenAI translation prompt and returns the translated
+  string.
+boundary: |
+  Superseded by /analyze (which routes dictionary vs translation
+  server-side). Kept for back-compat with pre-T4 clients.

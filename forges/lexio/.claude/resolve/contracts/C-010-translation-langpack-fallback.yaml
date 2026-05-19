@@ -1,0 +1,14 @@
+id: C-010
+title: Falls back to server /analyze when Apple Translation lang pack missing
+source_commit: f11fc7e
+layer: client
+trigger: |
+  TranslationService attempts an Apple-Translation-framework call
+  for a locale whose language pack is not installed locally.
+effect: |
+  Service silently falls back to the OpenAI route via /analyze.
+  User sees a translated result without any "install language pack"
+  prompt.
+boundary: |
+  Silent fallback. User is not prompted to download. Decision is
+  deterministic per (source_lang, target_lang) pair within session.

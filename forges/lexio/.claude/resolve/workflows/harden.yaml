@@ -1,0 +1,230 @@
+id: harden
+name: Harden — single-process meta-loop (observe + triage + inner iteration)
+description: |
+  ONE workflow for the whole meta-loop. Replaces the prior separate
+  retrospective + harden skills, which split observe/action into two
+  user-invocations and risked drift between them.
+
+  Structure:
+    observe (optional) → triage (optional) → INNER LOOP × N → exit
+
+  The inner loop runs once per hold the user wants to address in this
+  session. Convergence is user-driven: each iteration ends with
+  re-baseline + explicit "another?" question. No auto-chaining.
+
+  This workflow does NOT ship product features. It hardens the forge
+  itself — gate scripts, hooks, workflow contracts, memory discipline.
+  Companion to maintain-loop (feature work); the two operate at
+  different layers.
+
+  Origin: 2026-05-12 retrospective + the realization that observe and
+  action belong in ONE process for convergence (clarified by user after
+  initial split-skill packaging mismatched intent). Memory note
+  20260512T*-meta-loop-pipeline (when written) is the durable record.
+
+variables:
+  hold_id:
+    type: string
+    description: id of the hold being processed (set per inner-loop iteration)
+    must_declare_in: select
+
+phases:
+
+  # ── Outer: discovery (optional) ───────────────────────────────────
+
+  - id: observe
+    name: Observe — collect session facts
+    type: action
+    when: |
+      The user invoked harden via a retro-style trigger (retrospective /
+      retro / reflect) OR the model judges that new findings have
+      accumulated since the last triage. Skip when the user explicitly
+      says "process existing holds" or holds.yaml has pending entries
+      and the user shows no interest in adding more.
+    procedure:
+      - List Task tool invocations and their subagent_type for this session.
+      - List files written under ${PRIVATE_ROOT}/memory/ this session.
+      - List git commits on the workdir ($WORKDIR) and on the forge (taf).
+      - Note any hook-block events (pre-bash-guard, pre-task, pre-memory-write).
+      - Note any phase-advance.sh invocations and their pass/fail outcomes.
+      - Optionally delegate evaluation to the master (direct analysis) agent.
+
+  - id: triage
+    name: Triage — DRAFT findings + append holds.yaml
+    type: action
+    when: observe surfaced findings not already present in holds.yaml
+    requires_approval: true
+    procedure:
+      - For each new finding, emit a DRAFT block with full holds.yaml schema (id, title, category in {4-a-doc, 4-b-inventory, 4-c-mechanism, 4-d-refactor}, discovered, severity, leverage, recurrence_risk, notes).
+      - Wait for explicit user sign-off per finding. User may amend, reject, or merge with an existing entry.
+      - Append approved DRAFTs to ${PRIVATE_ROOT}/holds.yaml via precise Edit (preserve comments and existing entries).
+
+  # ── Inner: per-hold iteration ─────────────────────────────────────
+
+  - id: select
+    name: Select hold (inner loop entry)
+    type: action
+    required: true
+    requires_approval: true
+    procedure:
+      - List status=pending entries from ${PRIVATE_ROOT}/holds.yaml with metadata.
+      - Recommend top by (leverage × recurrence_risk); risk-of-implementation as tiebreaker (lower first).
+      - User explicitly confirms one id before any further step. Never auto-pick.
+      - If holds.yaml has zero pending entries, exit the workflow with a stable-state message — do not fabricate work.
+
+  - id: classify
+    name: Classify category
+    type: action
+    required: true
+    procedure:
+      - Read the selected hold's `category` field.
+      - 4-a-doc → memory-note sub-pipeline (use forge-memory).
+      - 4-b-inventory → mechanical sync sub-pipeline.
+      - 4-c-mechanism → upgrade sub-pipeline, with passive-before-active staging.
+      - 4-d-refactor → TDD-shaped before/after invariant sub-pipeline.
+      - If category is missing or ambiguous, ask the user to disambiguate.
+
+  - id: risk-decompose
+    name: Risk-decompose into sub-steps
+    type: action
+    procedure:
+      - List the work as ordered sub-steps with explicit risk grade.
+      - Ordering rule — lowest risk first.
+      - Surface ONE sub-step as in-progress; defer the rest.
+
+  - id: implement
+    name: Implement narrowly
+    type: action
+    procedure:
+      - Touch ONLY the files required for the surfaced sub-step.
+      - Stay within the category's sub-pipeline shape.
+      - Do not opportunistically clean up adjacent code — that becomes a separate hold (cataloged in step 8).
+
+  - id: demonstrate
+    name: Demonstrate post-hoc
+    type: action
+    required: true
+    procedure:
+      - Run the new mechanism against the most recently completed maintain-loop / workflow instance, NOT a synthetic test.
+      - Self-referential validation when possible (e.g. phase-advance.sh on the just-finished work).
+      - Report findings inline.
+
+  - id: catalog
+    name: Catalog new surfaces
+    type: action
+    procedure:
+      - Any unexpected finding from demonstrate → new entry in holds.yaml (status=pending).
+      - Require user sign-off (DRAFT) before appending.
+      - Do NOT silently fix — the catalog discipline is the deferred-validation record.
+
+  - id: commit
+    name: Commit + cross-reference
+    type: action
+    procedure:
+      - Conventional commit prefix (feat / fix / refactor / docs / chore).
+      - Commit body MUST include the hold id and reference the diagnostic source if known.
+      - Stage explicit paths only.
+
+  - id: resolve
+    name: Close out — write closure memory note + DELETE hold from holds.yaml
+    type: action
+    required: true
+    requires_approval: true
+    procedure:
+      # As of 2026-05-16, holds.yaml is pending-only. `status: resolved`
+      # is forbidden — enforced by .claude/hooks/pre-holds-edit.sh and
+      # .claude/scripts/audit-checks/holds-resolution-integrity.sh.
+      # A resolved hold lives as a memory note + a deletion from this file.
+      - Draft a closure memory note at `${PRIVATE_ROOT}/memory/cross-cutting/<id>-hold-<hold-id>-closed.md`.
+      - |
+        Required frontmatter: id, title (`Hold <hold-id> closed — <one-line summary>`),
+        when (the resolution date, not the discovery date),
+        layer (`cross-cutting`),
+        status (`standing`),
+        links (point at any related notes — prior hold closures, follow-on memory notes, etc.).
+      - |
+        Body must capture (a) the hold's original context (one-paragraph backfill from holds.yaml),
+        (b) the resolution including commit refs / file refs,
+        (c) one short "why this matters" or follow-on pointer.
+      - Show the DRAFT to the user; wait for explicit sign-off.
+      - On approval, write the note (pre-memory-write.sh enforces frontmatter + no DRAFT marker).
+      - DELETE the corresponding entry from ${PRIVATE_ROOT}/holds.yaml via precise Edit
+        (preserve comments and remaining pending entries).
+      - Run .claude/scripts/audit-checks/holds-resolution-integrity.sh — must exit 0.
+        If non-zero, the file is in an inconsistent state; surface to user before continuing.
+
+  - id: re-baseline
+    name: Re-baseline + ask "another iteration?"
+    type: action
+    required: true
+    procedure:
+      - List remaining status=pending entries grouped by category.
+      - Use AskUserQuestion with options "Yes, pick next" / "No, exit" / "Quit and capture lessons".
+      - On Yes → loop back to `select` phase.
+      - On No → exit phase.
+      - On Quit-with-lessons → run capture phase, then exit.
+
+  - id: capture
+    name: Capture lessons (optional)
+    type: skill
+    skill: forge-memory
+    when: user chose "Quit and capture lessons" at re-baseline OR a durable cross-cutting lesson clearly emerged
+    procedure:
+      - Draft a note under memory/cross-cutting/.
+      - Follow forge-memory DRAFT discipline (memory notes are append-only).
+
+  - id: exit
+    name: Exit — final session summary
+    type: action
+    required: true
+    procedure:
+      - Summarize what was processed this session (resolved holds, new holds cataloged).
+      - State the current pending count.
+      - Single line invitation for a future invocation if pending remains.
+
+skip_rules:
+  - When ${PRIVATE_ROOT}/holds.yaml has zero status=pending entries AND no new findings were observed → exit immediately with a stable-state message.
+  - When the selected hold's category is unknown → block at classify until disambiguated.
+  - When the user declines triage of every new finding AND no pending holds exist → exit; nothing to do.
+
+# Inner-loop topology — re-baseline branches back to select.
+# A single invocation may process 0, 1, or N holds.
+loop_edges:
+  - from: re-baseline
+    to: select
+    condition: user_answer == "Yes, pick next"
+
+evaluation_areas:
+  # Inherited from the former retrospective workflow; used during observe
+  # to identify what to triage.
+  - agent_utilization:
+      check_against: agents.yaml
+      flag_when:
+        - Code written without developer-client agent
+        - Tests written without developer-client agent
+        - Diff merged without reviewer agent
+  - skill_utilization:
+      check_against: skills.yaml
+      flag_when:
+        - Swift work without ref-swift-patterns auto-load
+        - Review without ref-code-review skill
+  - workflow_adherence:
+      check_against: active workflow YAML
+      flag_when:
+        - Phase executed out of order
+        - Required post-gate skipped (especially phase-advance.sh not invoked at phase boundary)
+  - memory_drift:
+      check_against: memory/README.md immutability rule
+      flag_when:
+        - A note's body or frontmatter was edited after first write
+        - Supersession declared in the OLD note instead of the new one
+  - communication_drift:
+      flag_when:
+        - A unilateral architectural decision was made without surfacing the trade-off to the user
+        - release-client phase skipped when client_changes != none
+
+references:
+  - ${PRIVATE_ROOT}/holds.yaml  # entries (private overlay)
+  - $forge_root/.claude/holds.schema.yaml  # schema (public)
+  - $forge_root/.claude/scripts/phase-advance.sh
+  - Memory note (to be written under hold id meta-loop-memory-note)

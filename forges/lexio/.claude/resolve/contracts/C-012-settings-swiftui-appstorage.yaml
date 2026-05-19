@@ -1,0 +1,14 @@
+id: C-012
+title: Settings Scene controls persist via @AppStorage
+source_commit: d43e93c
+layer: client
+trigger: |
+  User mutates any control in the SwiftUI Settings Scene
+  (toggle, picker, text field).
+effect: |
+  Value is persisted to UserDefaults via @AppStorage; subsequent app
+  launches read it back through the same key.
+boundary: |
+  No migration logic — when a key is absent the @AppStorage default
+  applies. No schema versioning. Changes propagate immediately to
+  bound views.

@@ -1,0 +1,59 @@
+#!/bin/bash
+# taf — git pre-commit hook
+#
+# Blocks commits that would re-introduce private-overlay artifacts into
+# the public taf repo. Installed per-clone via:
+#   git config core.hooksPath runtime/git-hooks
+# (codified in taf/runtime/scripts/bootstrap.sh, added in 1B-5.)
+#
+# Forbidden patterns:
+#   1. Tracked content under forges/*/memory/        (product IP)
+#   2. Tracked content named forges/*/.claude/holds.yaml  (entries; schema is in holds.schema.yaml)
+#   3. Tracked content named forges/*/profile.local.yaml  (machine-local)
+#   4. forges/*/profile.yaml containing literal "/Users/" strings  (abs path leak)
+#
+# Exit non-zero with a clear message to abort the commit. The user can
+# fix the staged content and retry.
+
+set -euo pipefail
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACMR)
+[[ -z "${STAGED}" ]] && exit 0
+
+FORBIDDEN=()
+
+while IFS= read -r path; do
+  case "${path}" in
+    forges/*/memory/*)
+      FORBIDDEN+=("${path}  (memory note — product IP)")
+      ;;
+    forges/*/.claude/holds.yaml)
+      FORBIDDEN+=("${path}  (holds entries — use holds.schema.yaml for schema)")
+      ;;
+    forges/*/profile.local.yaml)
+      FORBIDDEN+=("${path}  (machine-local profile override)")
+      ;;
+    forges/*/profile.yaml)
+      # Permit profile.yaml itself, but block if it contains abs paths.
+      if git show ":${path}" 2>/dev/null | grep -q '/Users/'; then
+        FORBIDDEN+=("${path}  (contains literal /Users/ path — env-template instead)")
+      fi
+      ;;
+  esac
+done <<< "${STAGED}"
+
+if [[ ${#FORBIDDEN[@]} -gt 0 ]]; then
+  echo "" >&2
+  echo "✘ taf/git pre-commit: refused — private-overlay artifacts staged." >&2
+  echo "" >&2
+  for entry in "${FORBIDDEN[@]}"; do
+    echo "    ${entry}" >&2
+  done
+  echo "" >&2
+  echo "Private overlay lives at \$PRIVATE_ROOT (default ../private/forges/<product>/)." >&2
+  echo "See forges/<product>/PRIVATE.md for the overlay layout." >&2
+  echo "" >&2
+  exit 1
+fi
+
+exit 0

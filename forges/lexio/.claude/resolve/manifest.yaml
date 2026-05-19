@@ -1,0 +1,336 @@
+# Lexio Resolve Manifest
+#
+# Canonical, machine-readable index of Lexio's workflows, agents,
+# skills, and gates. CLAUDE.md defers to this file. Prose may explain
+# intent; this file decides routing.
+#
+# Read by:
+#   - $TAS_ROOT/scripts/resolve.sh         (workflow ID -> phase sequence)
+#   - $TAS_ROOT/scripts/lint-workflow.sh   (validate session against workflow)
+#   - .claude/hooks/session-init.sh        (emit available assets at session start)
+#   - .claude/hooks/pre-task.sh            (validate Task agent against allowlist)
+#
+# Authority: this file is the single source of truth for *how* Lexio
+# work is sequenced. The product domain (what Lexio is) stays in
+# memory/.
+
+forge: lexio
+version: 2
+schema_version: 2
+
+# ── Workflows ──────────────────────────────────────────────────────
+#
+# Two audiences:
+#   master_skill: invoked directly by the master via a tas slash command.
+#   internal:     invoked by a sub-agent via an attached procedural skill
+#                 (developer / reviewer reads the spec from tas).
+#
+# Both kinds have a spec yaml under .claude/resolve/workflows/ (or this
+# directory for audit.yaml). resolve.sh emits the phase list to whichever
+# actor is following it.
+
+workflows:
+
+  # Master-direct (slash commands; skill bodies live in tas/skills/)
+  audit:
+    skill: forge-audit
+    spec: audit.yaml
+    audience: master
+    description: Run the forge audit-axis rubric and emit a 4-axis score report (READ-ONLY measurement).
+    triggers:
+      - audit
+      - axis status
+      - rubric
+      - where are we on
+      - 4-axis
+
+  harden:
+    skill: forge-harden
+    spec: workflows/harden.yaml
+    audience: master
+    description: |
+      Single-process meta-loop: observe session -> triage findings into
+      holds.yaml -> inner loop over one hold at a time (select -> classify
+      -> risk-decompose -> implement -> demonstrate -> catalog -> commit
+      -> resolve -> re-baseline -> loop or exit). Does NOT ship product
+      features - hardens the forge process. Convergence is user-driven.
+    triggers:
+      - harden
+      - process improve
+      - pick a hold
+      - work on holds
+      - retrospective
+      - retro
+      - reflect on this session
+
+  memory:
+    skill: forge-memory
+    spec: workflows/docs.yaml
+    audience: master
+    description: Surface session candidates and/or write an approved atomic memory note (append-only; DRAFT-gated).
+    triggers:
+      - memory note
+      - record this
+      - capture decision
+      - what should we remember
+      - remember this
+
+  # Sub-agent internal (attached procedural skills; no slash command)
+  maintain-loop:
+    skill: loop-maintain
+    spec: workflows/maintain-loop.yaml
+    audience: developer
+    description: developer's end-to-end Plan -> Implement -> Test -> Verify -> Commit spec for this forge. Read internally when the master delegates an implementation task to developer-client or developer-server.
+
+  tdd:
+    skill: loop-tdd
+    spec: workflows/tdd.yaml
+    audience: developer
+    description: developer's Red -> Green -> Refactor spec for a single behavior. Read internally when the master delegates a focused single-behavior task.
+
+  review:
+    skill: audit-diff
+    spec: workflows/review.yaml
+    audience: reviewer
+    description: reviewer's diff-audit spec. Read internally when the master delegates a review task.
+
+# ── Agents ─────────────────────────────────────────────────────────
+# Allowed callables and aliases live in agents.yaml.
+agents: agents.yaml
+
+# ── Skills ─────────────────────────────────────────────────────────
+# Per-callable skill attach mapping lives in skills.yaml.
+# Skill bodies themselves live in $TAS_ROOT/skills/.
+skills: skills.yaml
+
+# ── Gates ──────────────────────────────────────────────────────────
+# Pass criteria, command, and timeout for each gate. Phases reference
+# gates by ID; resolve.sh emits the invocation.
+gates: gates.yaml
+
+# ── Hard rules (mirrored from CLAUDE.md for machine access) ────────
+hard_rules:
+  - id: l-layering
+    description: L0 -> all; L1 -> L2/L3; L2 -> L3. Reverse imports forbidden.
+    enforced_by: scripts/gates/architecture.sh
+  - id: r-secrets
+    description: API keys / sensitive data - server-only, Keychain on client. Never bundled, never logged.
+    enforced_by: manual review (reviewer agent)
+  - id: r-single-translation-engine
+    description: Server uses OpenAI only. No second provider speculatively introduced.
+    enforced_by: manual review
+  - id: r-source-not-config
+    description: Bug fixes target source files, not samconfig.toml / template.yaml / serverless.yml. Confirm before editing config.
+    enforced_by: pre-edit-config-warn.sh (PreToolUse Write|Edit - blocks until user confirms via `export FORGE_CONFIG_EDIT_APPROVED=1`) + manual review
+
+# ── Paths ──────────────────────────────────────────────────────────
+paths:
+  forge_root: $TAF_ROOT/forges/lexio
+  workdir: ${WORKDIR}
+  # memory_root is in the PRIVATE overlay since taf phase-1b-1.
+  # Resolved by profile-loader.sh via profile.yaml#private_root.
+  memory_root: ${PRIVATE_ROOT}/memory
+  resolve_root: $TAF_ROOT/forges/lexio/.claude/resolve
+  # scripts now live in tas/scripts/; only forge-bound gates remain under
+  # .claude/scripts/gates/.
+  gates_scripts_root: $TAF_ROOT/forges/lexio/.claude/scripts/gates
+  tas_scripts_root: $TAS_ROOT/scripts
+  # Holds split: schema is public (taf), entries are in the private overlay.
+  holds_schema: $TAF_ROOT/forges/lexio/.claude/holds.schema.yaml
+  holds_entries: ${PRIVATE_ROOT}/holds.yaml
+
+# ── Scope Classification Index ─────────────────────────────────────
+# Each entry tags a path (relative to $TAF_ROOT/forges/lexio/) with its
+# public/private classification per the 2x3 grid (see PRIVATE.md):
+#
+#   scope: universal      T1 - forge methodology, product-agnostic
+#   scope: stack-bound    T2 - specific to Swift + AWS + OpenAI configuration
+#   scope: product        T3 - lexio product state (lives in private overlay)
+#   scope: product-schema T1 schema whose instances are T3; doc travels with private overlay
+#
+# visibility: public | private
+#
+# This index is intentionally redundant with the filesystem layout. Its
+# purpose is navigation for external readers browsing the public repo.
+# A future classification-coverage gate verifies every tracked file
+# under forges/lexio/ appears here.
+
+scope_classification:
+  - path: CLAUDE.md
+    scope: universal
+    visibility: public
+    note: Master persona. Phase-status line removed in 1B-4.
+
+  - path: PRIVATE.md
+    scope: universal
+    visibility: public
+    note: Stub documenting private overlay location.
+
+  - path: profile.yaml
+    scope: stack-bound
+    visibility: public
+    note: workdir and private_root env-templated in Phase 1B-3.
+
+  - path: .claude/settings.json
+    scope: universal
+    visibility: public
+    note: env block + abs-path additionalDirectories moved to settings.local.json in Phase 1B-3.
+
+  - path: .claude/settings.local.json.example
+    scope: universal
+    visibility: public
+    note: Template for the gitignored settings.local.json. Documents the required env vars (WORKDIR, TAF_ROOT, PRIVATE_ROOT, etc.).
+
+  - path: .claude/agent-prompt-prefix.md
+    scope: universal
+    visibility: public
+
+  - path: .claude/holds.schema.yaml
+    scope: universal
+    visibility: public
+    note: Created in Phase 1B-2. Schema only; no hold entries.
+
+  - path: .claude/holds.yaml
+    scope: product
+    visibility: private
+    note: Gitignored since Phase 0. Lives in private overlay.
+
+  - path: .claude/hooks/post-swift-edit.sh
+    scope: stack-bound
+    visibility: public
+
+  - path: .claude/hooks/pre-edit-config-warn.sh
+    scope: universal
+    visibility: public
+
+  - path: .claude/hooks/pre-holds-edit.sh
+    scope: product-schema
+    visibility: public
+    note: Path to holds.yaml must use PRIVATE_ROOT after Phase 1B-5.
+
+  - path: .claude/resolve/manifest.yaml
+    scope: universal
+    visibility: public
+
+  - path: .claude/resolve/agents.yaml
+    scope: stack-bound
+    visibility: public
+
+  - path: .claude/resolve/skills.yaml
+    scope: stack-bound
+    visibility: public
+
+  - path: .claude/resolve/gates.yaml
+    scope: stack-bound
+    visibility: public
+    note: cwd values env-templated in Phase 1B-3.
+
+  - path: .claude/resolve/audit.yaml
+    scope: universal
+    visibility: public
+
+  - path: .claude/resolve/workflows/harden.yaml
+    scope: universal
+    visibility: public
+
+  - path: .claude/resolve/workflows/maintain-loop.yaml
+    scope: universal
+    visibility: public
+
+  - path: .claude/resolve/workflows/tdd.yaml
+    scope: universal
+    visibility: public
+
+  - path: .claude/resolve/workflows/review.yaml
+    scope: universal
+    visibility: public
+
+  - path: .claude/resolve/workflows/docs.yaml
+    scope: universal
+    visibility: public
+
+  - path: .claude/resolve/contracts/README.md
+    scope: universal
+    visibility: public
+
+  - path: .claude/resolve/contracts/
+    scope: stack-bound
+    visibility: public
+    glob: "C-*.yaml"
+    note: 16 feature contracts. Methodology universal; content stack-bound.
+
+  - path: .claude/scripts/gates/architecture.sh
+    scope: stack-bound
+    visibility: public
+    note: WORKDIR env-templated in Phase 1B-3.
+
+  - path: .claude/scripts/gates/build.sh
+    scope: stack-bound
+    visibility: public
+
+  - path: .claude/scripts/gates/unit.sh
+    scope: stack-bound
+    visibility: public
+
+  - path: .claude/scripts/gates/server-typecheck.sh
+    scope: stack-bound
+    visibility: public
+
+  - path: .claude/scripts/gates/server-tests.sh
+    scope: stack-bound
+    visibility: public
+
+  - path: .claude/scripts/gates/release-installed.sh
+    scope: stack-bound
+    visibility: public
+
+  - path: .claude/scripts/gates/git-clean-status.sh
+    scope: stack-bound
+    visibility: public
+
+  - path: .claude/scripts/audit-checks/
+    scope: universal
+    visibility: public
+    glob: "*.sh"
+    note: Rubric automation (11 scripts). holds-resolution-integrity.sh needs private_root update in 1B-5.
+
+  - path: .claude/scripts/lifecycle/auto-commit-repos.sh
+    scope: product
+    visibility: public
+    note: Contains abs paths. Env-template in Phase 1B-3.
+
+  - path: memory/README.md
+    scope: product-schema
+    visibility: private
+
+  - path: memory/TAXONOMY.md
+    scope: product-schema
+    visibility: private
+
+  - path: memory/_legacy/
+    scope: product
+    visibility: private
+
+  - path: memory/client/
+    scope: product
+    visibility: private
+
+  - path: memory/server/
+    scope: product
+    visibility: private
+
+  - path: memory/cross-cutting/
+    scope: product
+    visibility: private
+
+  - path: memory/product/
+    scope: product
+    visibility: private
+
+  - path: memory/overview/
+    scope: product
+    visibility: private
+
+  - path: memory/threads/
+    scope: product
+    visibility: private

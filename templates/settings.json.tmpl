@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "additionalDirectories": ["{{workdir}}"],
+    "allow": [
+      "Read({{workdir}}/**)",
+      "Glob({{workdir}}/**)",
+      "Grep({{workdir}}/**)",
+      "Bash(cd {{workdir}} && *)"
+    ],
+    "ask": [
+      "Edit({{workdir}}/**)",
+      "Write({{workdir}}/**)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.taf/bin/forge-sync-memory {{product}}"
+          }
+        ]
+      }
+    ]
+  }
+}

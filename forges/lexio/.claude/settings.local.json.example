@@ -1,0 +1,22 @@
+{
+  "_comment": "Machine-local Claude Code settings for the lexio forge. Copy to settings.local.json and edit. The .example file is the public template; settings.local.json itself is gitignored (per taf/.gitignore '**/settings.local.json'). Loaded merged with the public settings.json — env block values here override / supplement those in settings.json.",
+
+  "permissions": {
+    "additionalDirectories": [
+      "/Users/REPLACE_ME/workspaces/lexio"
+    ],
+    "allow": []
+  },
+
+  "env": {
+    "FORGE_BLOCKING_PHASE_GATE": "1",
+    "TAF_ROOT": "/Users/REPLACE_ME/workspaces/ta-set/taf",
+    "TAS_ROOT": "/Users/REPLACE_ME/workspaces/ta-set/tas",
+    "TAA_ROOT": "/Users/REPLACE_ME/workspaces/ta-set/taa",
+    "FORGE_ROOT": "/Users/REPLACE_ME/workspaces/ta-set/taf/forges/lexio",
+    "WORKDIR": "/Users/REPLACE_ME/workspaces/lexio",
+    "PRIVATE_ROOT": "/Users/REPLACE_ME/workspaces/ta-set/private/forges/lexio"
+  },
+
+  "hooks": {}
+}

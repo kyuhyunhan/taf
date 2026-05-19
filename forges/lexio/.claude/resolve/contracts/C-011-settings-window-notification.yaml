@@ -1,0 +1,13 @@
+id: C-011
+title: Settings window opens via menubar or hotkey, single-instance
+source_commit: bf18d48
+layer: client
+trigger: |
+  User selects "Settings" from the menubar item OR invokes the
+  Settings hotkey.
+effect: |
+  Settings window is presented. If a Settings window is already
+  open, it is brought to front rather than duplicated. A
+  NotificationCenter post (SettingsDidOpen) is emitted.
+boundary: |
+  Exactly one Settings window may exist per app session.

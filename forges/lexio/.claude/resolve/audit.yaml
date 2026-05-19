@@ -1,0 +1,364 @@
+# Forge Audit-Axis Goals — read-only declaration.
+#
+# Edited by hand when adding/removing criteria. `audit.sh` reads this
+# file, dispatches each criterion's `check`, and aggregates per-axis scores.
+#
+# Rubric per criterion: 0=NOT_STARTED, 1=PARTIAL, 2=MET, 3=EXCEEDED.
+# Axis MET when mean(criterion scores) >= axis.threshold.
+# Overall GREEN when all 4 axes MET.
+#
+# `check.mode`: `auto` runs `check.command` (exit code → score 0/1/2/3),
+#   `manual` displays `check.criteria` and prompts operator.
+# `$FORGE_ROOT` is exported by audit.sh before sub-script invocation.
+# `$WORKDIR` resolves to the lexio repo workdir.
+#
+# Plan reference: $HOME/.claude/plans/ux-lively-kurzweil.md (2026-05-15).
+
+axes:
+
+  axis-1-deterministic-integration:
+    title: tas/taa integration is deterministic, not advisory
+    threshold: 2.0
+    criteria:
+      - id: G1-C1
+        title: Agent allowlist exists & pre-task.sh blocks unlisted Task calls
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g1-c1-allowlist-enforced.sh"
+        rubric:
+          0: "agents.yaml absent or pre-task.sh missing"
+          1: "agents.yaml present but pre-task.sh doesn't actually block"
+          2: "both present and validated by smoke test"
+          3: "+ phase-state-aware blocking (LEXIO_BLOCKING_PHASE_GATE=1) default-on"
+
+      - id: G1-C2
+        title: Every agent in agents.yaml declares its auto_loads (tas skills)
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g1-c2-auto-loads-declared.sh"
+        rubric:
+          0: "no auto_loads field"
+          1: "<50% agents have auto_loads"
+          2: "all agents have auto_loads"
+          3: "+ auto_loads cross-reference resolves to actual installed tas skills"
+
+      - id: G1-C3
+        title: agents.yaml output_discipline requires [HYPOTHESIS] marker on Explore/Plan
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g1-c3-hypothesis-marker.sh"
+        rubric:
+          0: "no marker requirement"
+          2: "marker requirement present on Explore + Plan"
+          3: "+ post-task hook validates report contains marker"
+
+      - id: G1-C4
+        title: workflow YAML phases that produce production code have agent_required:true
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g1-c4-agent-required-declared.sh"
+        rubric:
+          0: "no agent_required field anywhere"
+          1: "1-2 phases flagged"
+          2: "all production-code phases flagged (implement-server / implement-client / write-tests-client)"
+          3: "+ enforced by pre-edit hook"
+
+      - id: G1-C5
+        title: agent_required is ENFORCED, not just declared
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g1-c5-agent-required-enforced.sh"
+        rubric:
+          0: "no hook reads agent_required"
+          1: "hook reads it but only warns"
+          2: "hook blocks direct Edit/Write on production paths during agent_required phases (with env opt-in)"
+          3: "default-on after pilot validation"
+
+      - id: G1-C6
+        title: dispatch-agent.sh wrapper auto-applies prompt-prefix and resolves auto_loads
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g1-c6-dispatch-wrapper.sh"
+        rubric:
+          0: "wrapper absent — every Task call hand-built"
+          1: "wrapper exists but model doesn't use it"
+          2: "wrapper used for >=80% of agent dispatches in latest 3 sessions"
+          3: "+ wrapper auto-injects tas skill bodies into Task prompts (runtime injection)"
+
+      - id: G1-C7
+        title: Production code changes go through Task delegation, not direct Edit/Write
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g1-c7-task-delegation-ratio.sh"
+        rubric:
+          0: "any-signal <25% in last 10 prod-code commits"
+          1: "any-signal 25–50%, OR strong <50%"
+          2: "any-signal ≥75% AND strong (Authored-By-Agent) ≥50%"
+          3: "strong ≥90%"
+
+
+  axis-2-memory-feedback-loop:
+    title: Memory writes flow back into agent context
+    threshold: 2.0
+    criteria:
+      - id: G2-C1
+        title: Atomic-note frontmatter discipline enforced (id/title/when/layer/status)
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g2-c1-frontmatter-discipline.sh"
+        rubric:
+          0: "pre-memory-write.sh absent or unverified"
+          2: "hook enforces frontmatter + DRAFT marker"
+          3: "+ lint runs on every commit (CI)"
+
+      - id: G2-C2
+        title: Every `links:` entry has a `why:` field (no naked links)
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g2-c2-link-why-coverage.sh"
+        rubric:
+          0: "no enforcement; <50% links have why"
+          1: "50-90% have why"
+          2: ">=95% have why"
+          3: ">=99% + dedicated link-why gate"
+
+      - id: G2-C3
+        title: session-init surfaces recent N memory notes
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g2-c3-session-init-surfacing.sh"
+        rubric:
+          0: "no surfacing"
+          2: "top-10 by mtime listed with id+title"
+          3: "+ layer-grouped + 'unread since last session' marker"
+
+      - id: G2-C4
+        title: memory-search.sh exists and returns ranked results
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g2-c4-memory-search.sh"
+        rubric:
+          0: "absent"
+          1: "exists but only literal grep"
+          2: "ranks by layer match + recency + keyword density"
+          3: "+ vector embedding (semantic)"
+
+      - id: G2-C5
+        title: Agent dispatch auto-injects layer-matched memory into Task prompt
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g2-c5-agent-memory-injection.sh"
+        rubric:
+          0: "no injection"
+          1: "injects raw frontmatter of top-N notes"
+          2: "injects layer-matched notes (developer-client <- memory/client/* etc.)"
+          3: "+ keyword-relevance ranking (RAG-light)"
+
+      - id: G2-C6
+        title: memory-record skill surfaces decision candidates at session end
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g2-c6-memory-record-skill.sh"
+        rubric:
+          0: "absent"
+          1: "exists but doesn't scan git log or transcript"
+          2: "scans git-log of session and proposes candidate notes for owner approval"
+          3: "+ measures whether subsequent sessions reference the new note"
+
+      - id: G2-C7
+        title: Dead-note ratio (notes never referenced by later notes) below 40%
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g2-c7-dead-note-ratio.sh"
+        rubric:
+          0: ">=60% dead"
+          1: "40-59% dead (current: 57%)"
+          2: "20-39% dead"
+          3: "<20% dead OR every dead note has documented archive rationale"
+
+
+  axis-3-test-eval-guardrails:
+    title: LLM behavior is measured, not assumed
+    threshold: 2.0
+    criteria:
+      - id: G3-C1
+        title: Structural unit test coverage (client + server)
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g3-c1-structural-coverage.sh"
+        rubric:
+          0: "<20% of production layers have tests"
+          1: "20-50%"
+          2: ">=50%"
+          3: ">=75%"
+
+      - id: G3-C2
+        title: Server prompt has SECURITY & SAFETY RULES (delimiter / anti-leak / I-don't-know)
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g3-c2-server-prompt-guards.sh"
+        rubric:
+          0: "absent"
+          2: "all three patterns present"
+          3: "+ verified by adversarial test fixture"
+
+      - id: G3-C3
+        title: User input wrapped in [INPUT_START]/[INPUT_END] delimiters
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g3-c3-input-delimiter.sh"
+        rubric:
+          0: "raw concat"
+          2: "delimited"
+          3: "+ delimiter stripping defense if user text contains the markers"
+
+      - id: G3-C4
+        title: evals/golden/ exists with >=50 input->expected pairs
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g3-c4-golden-dataset.sh"
+        rubric:
+          0: "directory absent"
+          1: "<25 pairs"
+          2: ">=50 pairs across translation + dictionary + adversarial buckets"
+          3: ">=150 pairs + per-locale balance"
+
+      - id: G3-C5
+        title: run-evals.ts (or equivalent) runs eval against live OpenAI
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g3-c5-run-evals.sh"
+        rubric:
+          0: "absent"
+          1: "exists but no rubric (raw outputs)"
+          2: "applies LLM-as-judge Likert + cosine-similarity per Anthropic develop-tests"
+          3: "+ snapshot-diff against last green run"
+
+      - id: G3-C6
+        title: CloudWatch alarms wired (latency p95 / token spike / cold-start frequency)
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g3-c6-cloudwatch-alarms.sh"
+        rubric:
+          0: "no alarms"
+          2: "3 alarms declared in template.yaml"
+          3: "+ deployed to AWS + SNS subscription wired"
+
+      - id: G3-C7
+        title: .claude/resolve/contracts/<feature-id>.yaml per shipped feature (trigger/effect/boundary)
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g3-c7-contracts-coverage.sh"
+        rubric:
+          0: "no contracts directory"
+          1: "directory exists, <50% features covered"
+          2: ">=90% of shipped features have a contract"
+          3: "+ every contract ID appears in >=1 test file"
+
+      - id: G3-C8
+        title: Haiku-based jailbreak pre-screen on /analyze hot path
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g3-c8-haiku-prescreen.sh"
+        rubric:
+          0: "no pre-screen"
+          1: "stub exists, not wired"
+          2: "live pre-screen rejects flagged input before OpenAI call"
+          3: "+ rejection log fields measurable in CloudWatch"
+
+      - id: G3-C9
+        title: CI runs evals + fails on regression
+        check:
+          mode: manual
+          criteria: "Inspect repo for .github/workflows/*.yml (or equivalent). Score: 0=no CI gating, 2=evals run on push + regression fails, 3=per-PR delta surfaced."
+        rubric:
+          0: "no CI gating"
+          2: "evals run on push, regression fails the build"
+          3: "+ per-PR delta surfaced in description"
+
+
+  axis-4-token-economy:
+    title: Structural reduction in repeated/wasted tokens
+    threshold: 2.0
+    criteria:
+      - id: G4-C1
+        title: agent-prompt-prefix.sh exists (hard-rules preamble DRY)
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g4-c1-prefix-script.sh"
+        rubric:
+          0: "absent"
+          2: "script exists"
+          3: "+ used by dispatch-agent.sh wrapper for every Task call"
+
+      - id: G4-C2
+        title: HYPOTHESIS marker reduces re-investigation cost
+        check:
+          mode: manual
+          criteria: "Past 5 sessions show <=1 invalidated Phase 1 inventory claim (vs. 4 in 2026-05-13 session). Inspect memory/cross-cutting/* notes filed since 2026-05-14 for any '[HYPOTHESIS] invalidated' mentions."
+        rubric:
+          0: ">=3 invalidated claims in last 5 sessions"
+          1: "1-2 invalidated"
+          2: "0-1 invalidated"
+          3: "0 invalidated + every claim cite-grounded with file:line"
+
+      - id: G4-C3
+        title: dispatch-agent.sh auto-applies prompt-prefix (cross-ref G1-C6)
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g4-c3-dispatch-includes-prefix.sh"
+        rubric:
+          0: "wrapper absent"
+          1: "wrapper present, doesn't include prefix"
+          2: "wrapper auto-prepends prefix"
+          3: "+ wrapper caches prefix via Anthropic prompt-caching"
+
+      - id: G4-C4
+        title: Prompt-caching prerequisites met (stable, sized, in-use preamble)
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g4-c4-cache-prerequisites.sh"
+        rubric:
+          0: "agent-prompt-prefix.sh non-deterministic OR absent — caching impossible"
+          1: "deterministic preamble but never invoked OR CLAUDE.md > 3k tokens"
+          2: "deterministic + dispatch wrapper in use (telemetry) + CLAUDE.md < 3k tok"
+          3: "+ explicit caching-strategy note in memory/cross-cutting/"
+        notes: |
+          The original rubric measured Anthropic API cache-hit rate, which is
+          internal to the host (Claude Code) and unobservable from the forge.
+          This rewrite measures what the forge controls: preamble determinism,
+          context slimness, and an in-memory strategy doc. The host's cache
+          behaviour layers on top — when/if it exposes telemetry, augment
+          this check to consume it.
+
+      - id: G4-C5
+        title: memory-search.sh enables RAG-style retrieval (cross-ref G2-C4)
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g4-c5-memory-search-rag.sh"
+        rubric:
+          0: "absent"
+          2: "ranked retrieval returns top-5 notes"
+          3: "+ embedding-based semantic ranking"
+
+      - id: G4-C6
+        title: CLAUDE.md aggregate size < 3.0k tokens (currently ~5.6k)
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g4-c6-claudemd-size.sh"
+        rubric:
+          0: ">5.0k tokens"
+          1: "3.0-5.0k"
+          2: "<3.0k tokens"
+          3: "<2.0k + remainder migrated to resolve/* YAML"
+
+      - id: G4-C7
+        title: Per-session token telemetry exists (dispatch wrappers log delta)
+        check:
+          mode: auto
+          command: ".claude/scripts/audit-checks/g4-c7-token-telemetry.sh"
+        rubric:
+          0: "no telemetry"
+          1: "logged but never consulted"
+          2: "logged + surfaced at session start (7-day avg)"
+          3: "+ regression alarm: avg/session ↑ 30% triggers retrospective"

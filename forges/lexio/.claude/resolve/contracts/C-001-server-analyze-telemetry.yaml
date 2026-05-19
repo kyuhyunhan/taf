@@ -1,0 +1,13 @@
+id: C-001
+title: Server emits structured telemetry on /analyze hot path
+source_commit: 4dfedf4
+layer: server
+trigger: |
+  POST /analyze handler accepts a request and begins processing.
+effect: |
+  A single JSON log line is emitted on completion containing
+  per-phase timings, total tokens (prompt + completion), the
+  prompt_id, and the route classification (translation vs dictionary).
+boundary: |
+  Telemetry is fire-and-forget; emission failure must not affect the
+  user response. No PII (raw user text) appears in the log line.

@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# List registered forges under $TAF_ROOT/forges/.
+set -euo pipefail
+
+if [[ -z "${TAF_ROOT:-}" ]]; then
+  SCRIPT="$0"
+  while [[ -L "$SCRIPT" ]]; do
+    _DIR="$(cd -P "$(dirname "$SCRIPT")" && pwd)"
+    SCRIPT="$(readlink "$SCRIPT")"
+    [[ "$SCRIPT" != /* ]] && SCRIPT="$_DIR/$SCRIPT"
+  done
+  TAF_ROOT="$(cd -P "$(dirname "$SCRIPT")/.." && pwd)"
+fi
+
+ROOT="$TAF_ROOT/forges"
+if [[ ! -d "$ROOT" ]]; then
+  echo "No forges yet. Run: forge-init <product> --workdir <abs-path>"
+  exit 0
+fi
+
+shopt -s nullglob
+found=0
+for d in "$ROOT"/*/; do
+  name="$(basename "$d")"
+  profile="${d}profile.yaml"
+  if [[ -f "$profile" ]]; then
+    _f() {
+      awk -v key="$1" '
+        $0 ~ "^[[:space:]]*"key":" {
+          sub(/^[^:]*:[[:space:]]*/, "")
+          sub(/[[:space:]]*#.*$/, "")
+          gsub(/^[[:space:]]+|[[:space:]]+$/, "")
+          print
+          exit
+        }
+      ' "$2"
+    }
+    workdir="$(_f workdir "$profile")"
+    s3="$(_f s3_uri "$profile")"
+    [[ -z "$s3" ]] && s3="(not set)"
+    last_sync="$(cat "${d}.last-sync" 2>/dev/null || echo "(never)")"
+    printf "%-20s  %s\n" "$name" "$workdir"
+    printf "  s3:        %s\n" "$s3"
+    printf "  last-sync: %s\n" "$last_sync"
+    found=1
+  fi
+done
+
+if [[ $found -eq 0 ]]; then
+  echo "No forges found under $ROOT"
+fi

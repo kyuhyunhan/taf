@@ -1,0 +1,57 @@
+id: review
+name: Review — read-only audit of the current diff
+description: |
+  Audit the current branch / diff via the reviewer agent. Read-only;
+  produces categorized findings, does not apply them.
+
+phases:
+
+  - id: inventory
+    name: Inventory the diff
+    type: action
+    procedure:
+      - Run `git -C $workdir status --short`.
+      - Run `git -C $workdir diff`.
+      - Confirm with user which range to review (HEAD, staged, or specific PR).
+
+  - id: audit
+    name: Run reviewer
+    type: agent
+    agent: reviewer
+    procedure:
+      - "Pass the diff + relevant file paths."
+      - "Request areas: architecture (L0–L3), coding standards, security, test coverage."
+      - "Output format: [MUST] / [SHOULD] / [NIT] / [PRAISE]."
+
+  - id: report
+    name: Surface findings
+    type: action
+    procedure:
+      - "Group findings by severity."
+      - "Quote agent verbatim where useful."
+      - "Recommend disposition for each [MUST] and [SHOULD] item — do NOT auto-apply."
+
+review_areas:
+  architecture:
+    rules:
+      - "L0 → all, L1 → L2/L3, L2 → L3 (no reverse imports)"
+    references:
+      - "memory/client/20260127T1010-dependency-direction-rule.md"
+  coding_standards:
+    auto_load_skill: ref-code-standards
+  swift_patterns:
+    auto_load_skill: ref-swift-patterns
+  security:
+    auto_load_skill: ref-apple-security
+    rules:
+      - "Sensitive data → Keychain"
+      - "API keys → server only (Secrets Manager)"
+      - "No ATS exceptions"
+  test_coverage:
+    rules:
+      - "New behavior covered by new tests"
+      - "New ViewModel state has at least one unit test per state transition"
+
+references:
+  - $forge_root/memory/overview/client.md
+  - $forge_root/memory/client/20260127T1010-dependency-direction-rule.md

@@ -1,0 +1,14 @@
+id: C-006
+title: Settings exposes Model + Language selection
+source_commit: f1f1cdb
+layer: client
+trigger: |
+  User opens Settings (T5) and changes the Model picker or the
+  Source/Target language picker.
+effect: |
+  Selection persists via @AppStorage. The next /analyze request
+  includes the new model_id and language preferences in its body.
+boundary: |
+  Changes apply to subsequent requests only; in-flight requests are
+  not cancelled. Cache (C-003) is NOT invalidated automatically — a
+  fresh ⌘C with the new settings produces a fresh cache key.

@@ -1,0 +1,17 @@
+# forges/ is now tracked as part of taf. Concrete forge instances live
+# under forges/<product>/. Exclude runtime telemetry, local-only settings,
+# and OS junk.
+**/.entire/
+**/settings.local.json
+**/.phase-state.json
+**/.session-token-log.jsonl
+**/.last-sync
+.DS_Store
+
+# --- Phase 0 tourniquet (2026-05-17) ---
+# Forge product-private overlay artifacts. Authoritative location is
+# ~/workspaces/ta-set/private/forges/<product>/ (see PRIVATE.md per forge).
+# Tools resolve via profile.yaml#private_root in Phase 1B.
+forges/*/memory/
+forges/*/.claude/holds.yaml
+forges/*/profile.local.yaml

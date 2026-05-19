@@ -1,0 +1,40 @@
+# Lexio process holds — SCHEMA and CONVENTIONS
+#
+# This file is the PUBLIC schema. Hold entries themselves live in the
+# private overlay at $PRIVATE_ROOT/holds.yaml (resolved by
+# profile-loader.sh; default $TAF_ROOT/../private/forges/lexio/holds.yaml).
+# The schema and the data are intentionally split: methodology is open;
+# instance state is private.
+#
+# As of 2026-05-16, holds.yaml is PENDING-ONLY active queue. Resolved
+# holds are NOT kept there — when a hold is resolved, `forge-harden`
+# writes a closure memory note under `memory/cross-cutting/` with
+# filename `<id>-hold-<hold-id>-closed.md`, then DELETES the entry from
+# holds.yaml. Historical closures live in memory; the file is the live
+# queue.
+#
+# Producer: forge-harden (observe→triage)  — writes status=pending entries with user sign-off.
+# Consumer: forge-harden (inner loop)      — picks one, walks it to closure (closure note + delete).
+#
+# Schema for each entry:
+#   id:              string, unique within file
+#                    Convention: L-N (loop), S-N (scope), I-N (implementation),
+#                    E-N (evaluation), C-N (communication), or freeform slug.
+#   title:           one-line summary
+#   category:        4-a-doc | 4-b-inventory | 4-c-mechanism | 4-d-refactor
+#                    (from memory note 20260512T1216-meta-loop-pipeline)
+#   discovered:      YYYY-MM-DD
+#   severity:        low | medium | high
+#   leverage:        low | medium | high
+#   recurrence_risk: low | medium | high
+#   status:          pending | in-progress | wontfix
+#                    NOTE: `resolved` is intentionally not an allowed value.
+#                    A resolved hold is a memory note plus a deletion from
+#                    holds.yaml — there is no "resolved-but-still-here"
+#                    intermediate state. Enforced by
+#                    `.claude/scripts/audit-checks/holds-resolution-integrity.sh`
+#                    and `.claude/hooks/pre-holds-edit.sh`.
+#   notes:           free-form context
+
+# ── Empty example (delete or replace when first real entry is added) ─
+holds: []

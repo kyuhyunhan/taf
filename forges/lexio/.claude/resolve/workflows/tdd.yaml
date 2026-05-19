@@ -1,0 +1,73 @@
+id: tdd
+name: Test-Driven Development — Red → Green → Refactor
+description: |
+  Drive a single behavior through TDD. Smaller than maintain-loop: no
+  deploy, no version bump. Use when the change is one focused behavior
+  and a failing test can be written before implementation.
+
+variables:
+  behavior:
+    type: string
+    description: The single behavior under test (one sentence).
+    must_declare_in: red
+
+phases:
+
+  - id: confirm
+    name: Confirm Behavior
+    type: clarify
+    required: true
+    procedure:
+      - State the behavior in one sentence.
+      - Confirm with user if ambiguous.
+
+  - id: red
+    name: Red — failing test
+    type: agent
+    agent: developer-client
+    procedure:
+      - Author a test that exercises the behavior.
+      - The test MUST fail when run against the unmodified code.
+    post_gates: [unit]
+    expected_gate_outcome: fail
+    notes: |
+      `unit` gate is expected to fail at this phase. lint-workflow.sh
+      recognizes this and does NOT halt the workflow. The next phase
+      (green) is unlocked only when the failure is recorded.
+
+  - id: green
+    name: Green — minimal implementation
+    type: agent
+    agent: developer-client
+    procedure:
+      - Write the smallest code change that makes the failing test pass.
+      - Do not refactor in this phase. Do not add unrelated features.
+    post_gates: [build, unit, architecture]
+
+  - id: refactor
+    name: Refactor (optional)
+    type: agent
+    agent: developer-client
+    when: the green code has duplication, naming friction, or architecture violation that the test will catch on every change
+    procedure:
+      - Improve the code while keeping tests green.
+      - Re-run gates after each refactor.
+    post_gates: [build, unit, architecture]
+
+  - id: review
+    name: Final Review
+    type: agent
+    agent: reviewer
+    procedure:
+      - Pass the cumulative diff to the agent.
+      - Apply [MUST] findings; defer [SHOULD] only with user agreement.
+
+  - id: commit
+    name: Commit
+    type: action
+    required: true
+    procedure:
+      - Single commit for the behavior (or red + green/refactor split — author's choice).
+
+references:
+  - $forge_root/memory/cross-cutting/20260507T1220-swift-workflow.md

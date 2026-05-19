@@ -1,0 +1,14 @@
+id: C-003
+title: Identical /analyze requests served from in-memory cache
+source_commit: b68f66f
+layer: client
+trigger: |
+  ClipboardWatcher detects a ⌘C event whose (text, source_lang,
+  target_lang) tuple matches a recent entry in ResponseCache.
+effect: |
+  The cached response is returned immediately without a /analyze
+  network call. Overlay shows result with a "cached" indicator
+  (optional UI hint).
+boundary: |
+  Cache lives for the lifetime of the app process; quit clears it.
+  No persistence to disk. Eviction policy is LRU with a fixed cap.

@@ -1,0 +1,13 @@
+id: C-014
+title: TextAnalyzer segments tokens + detects dominant language
+source_commit: ece316f
+layer: client
+trigger: |
+  Extracted text is passed to TextAnalyzer prior to dispatch.
+effect: |
+  NLTokenizer produces token boundaries. NLLanguageRecognizer
+  reports the dominant language with a confidence value.
+boundary: |
+  If confidence is below threshold OR text length < N chars, the
+  client omits source_lang from the request and lets the server
+  infer it. No client-side dictionary lookup.

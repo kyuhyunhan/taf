@@ -1,0 +1,85 @@
+# Lexio Agent Allowlist
+#
+# Lists which Task subagent_type values the master may invoke in this
+# forge. pre-task.sh blocks Task calls whose subagent_type is not
+# listed here.
+#
+# `base:` binds an entry to a generic taa persona (taa/agents/<base>.md).
+# When the master calls Task(<callable>, ...), dispatch-agent.sh
+# resolves to:
+#   - taa/agents/<base>.md persona body
+#   - + the skill attach declared in skills.yaml#attach.<callable>
+#   - + the forge's agent-prompt-prefix preamble
+#
+# An aliased callable lets one generic persona serve multiple stacks
+# in the same forge (developer-client vs developer-server).
+
+allowed:
+
+  # Forge-curated aliases (stack-bound instances of the generic developer)
+  developer-client:
+    base: developer
+    when: Authoring or modifying production Swift code under Lexio/.
+    forbidden_when:
+      - Server-side changes (use developer-server)
+      - Read-only review (use reviewer)
+    layers: [L0, L1, L2, L3]
+
+  developer-server:
+    base: developer
+    when: Authoring or modifying server/ (Lambda handlers, services, IaC, Secrets Manager).
+    forbidden_when:
+      - Client-side Swift changes (use developer-client)
+      - Read-only review (use reviewer)
+
+  # Generic personas used as-is
+  reviewer:
+    base: reviewer
+    when: Read-only audit of a diff, PR, or branch for quality / architecture / security / pattern compliance. Categorizes findings as [MUST]/[SHOULD]/[NIT]/[Q]/[PRAISE].
+    forbidden_when:
+      - Authoring or refactoring code
+
+  strategist:
+    base: strategist
+    when: Pre-implementation thinking — ideation, market scope, business/GTM/product/UX lenses, PRD authoring.
+    forbidden_when:
+      - Tech architecture (use architect)
+      - Implementation (use developer-*)
+
+  architect:
+    base: architect
+    when: Tech-stack consult (general + Apple), acceptance criteria derivation, tech-spec scaffolding, CI gates design.
+    forbidden_when:
+      - Product strategy / PRD authoring (use strategist)
+      - Code authoring (use developer-*)
+
+  # Built-in Claude Code agents (no taa persona; kept for narrow utility)
+  Explore:
+    source: built-in
+    when: Fast read-only search for narrow targeted lookups (file patterns, symbol grep). Smaller context than a full developer/reviewer dispatch.
+    forbidden_when:
+      - Code review / open-ended analysis (use reviewer)
+    output_discipline:
+      - Mark every claim about a runtime characteristic (main-thread blocking, async semantics, regex perf) as `[HYPOTHESIS]`. Implementers must verify by reading the cited code.
+      - Cite file:line for every observation. Distinguish observation from inference.
+
+  Plan:
+    source: built-in
+    when: Architecting an implementation plan during plan mode Phase 2. Returns step-by-step plans with file paths.
+    forbidden_when:
+      - Already mid-implementation
+    output_discipline:
+      - Treat Explore inputs as `[HYPOTHESIS]` unless cite-grounded with file:line + verified code excerpt.
+      - Mark every load-bearing assumption in the plan as `[HYPOTHESIS]`.
+
+# ── Routing index (reverse: which workflow phase invokes which callable) ──
+# This is the human-auditable index; the canonical source is each
+# workflow yaml's `agent:` field per phase.
+routing:
+  developer-client:  [maintain-loop, tdd]
+  developer-server:  [maintain-loop]
+  reviewer:          [maintain-loop, review, tdd]
+  strategist:        []        # invoked ad-hoc by master, not from a workflow phase
+  architect:         []        # invoked ad-hoc by master
+  Explore:           [maintain-loop, tdd, review]
+  Plan:              [maintain-loop, tdd]

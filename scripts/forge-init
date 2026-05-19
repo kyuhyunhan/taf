@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# Bootstrap a new forge under $TAF_ROOT/forges/<product>/.
+# Usage: forge-init <product> --workdir <abs-path> [--s3 <s3-uri>]
+set -euo pipefail
+
+# Self-locate when invoked from PATH; allow $TAF_ROOT override.
+if [[ -z "${TAF_ROOT:-}" ]]; then
+  SCRIPT="$0"
+  while [[ -L "$SCRIPT" ]]; do
+    _DIR="$(cd -P "$(dirname "$SCRIPT")" && pwd)"
+    SCRIPT="$(readlink "$SCRIPT")"
+    [[ "$SCRIPT" != /* ]] && SCRIPT="$_DIR/$SCRIPT"
+  done
+  TAF_ROOT="$(cd -P "$(dirname "$SCRIPT")/.." && pwd)"
+fi
+
+PRODUCT=""
+WORKDIR=""
+S3_URI=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --workdir) WORKDIR="$2"; shift 2 ;;
+    --s3)      S3_URI="$2"; shift 2 ;;
+    -h|--help)
+      cat <<EOF
+Usage: forge-init <product> --workdir <abs-path> --s3 <s3-uri>
+
+Creates a forge skeleton at \$TAF_ROOT/forges/<product>/ with:
+  - .claude/agents/<product>-master.md  (rendered from template)
+  - .claude/settings.json               (rendered from template)
+  - profile.yaml                        (rendered from template)
+  - CLAUDE.md                           (rendered from template)
+  - memory/ {architecture,decisions,domain}/
+
+The forge does NOT define sub-agents. Sub-agents are taa journeymen;
+declare them in profile.yaml:allowed_subagents after editing.
+EOF
+      exit 0 ;;
+    -*) echo "Unknown flag: $1" >&2; exit 2 ;;
+    *)
+      if [[ -z "$PRODUCT" ]]; then PRODUCT="$1"; shift
+      else echo "Unexpected arg: $1" >&2; exit 2; fi ;;
+  esac
+done
+
+if [[ -z "$PRODUCT" || -z "$WORKDIR" ]]; then
+  echo "Usage: forge-init <product> --workdir <abs-path> [--s3 <s3-uri>]" >&2
+  echo "  --s3 may be omitted if the bucket is not yet provisioned;" >&2
+  echo "  edit profile.yaml:memory.s3_uri later before the first sync." >&2
+  exit 2
+fi
+
+if [[ "$WORKDIR" != /* ]]; then
+  echo "--workdir must be an absolute path (got: $WORKDIR)" >&2
+  exit 2
+fi
+
+if [[ -z "$S3_URI" ]]; then
+  S3_URI=""    # left blank in profile; forge-sync-memory will no-op until set
+fi
+
+if [[ ! -d "$WORKDIR" ]]; then
+  echo "Warning: --workdir does not exist: $WORKDIR" >&2
+fi
+
+TEMPLATES="$TAF_ROOT/templates"
+FORGE_DIR="$TAF_ROOT/forges/$PRODUCT"
+
+if [[ -e "$FORGE_DIR" ]]; then
+  echo "Forge already exists: $FORGE_DIR" >&2
+  exit 1
+fi
+
+mkdir -p "$FORGE_DIR/.claude/agents"
+mkdir -p "$FORGE_DIR/memory/architecture"
+mkdir -p "$FORGE_DIR/memory/decisions"
+mkdir -p "$FORGE_DIR/memory/domain"
+
+# sed-render templates. We use | as delimiter so paths with / pass through.
+render() {
+  sed \
+    -e "s|{{product}}|$PRODUCT|g" \
+    -e "s|{{workdir}}|$WORKDIR|g" \
+    -e "s|{{s3_uri}}|$S3_URI|g" \
+    "$1"
+}
+
+render "$TEMPLATES/master-agent.md.tmpl"     > "$FORGE_DIR/.claude/agents/$PRODUCT-master.md"
+render "$TEMPLATES/profile.yaml.tmpl"        > "$FORGE_DIR/profile.yaml"
+render "$TEMPLATES/workspace-CLAUDE.md.tmpl" > "$FORGE_DIR/CLAUDE.md"
+render "$TEMPLATES/settings.json.tmpl"       > "$FORGE_DIR/.claude/settings.json"
+
+cat > "$FORGE_DIR/memory/README.md" <<EOF
+# Memory for $PRODUCT
+
+Synced from $S3_URI (pull-only, v1).
+Do not commit. Do not move into $WORKDIR.
+EOF
+
+cat <<EOF
+Forge created: $FORGE_DIR
+  workdir : $WORKDIR
+  s3      : $S3_URI
+  master  : .claude/agents/$PRODUCT-master.md
+
+Next:
+  1) Edit $FORGE_DIR/profile.yaml
+       - allowed_subagents: pick taa journeymen
+       - skill_applicability.include: pick tas tags/globs
+  2) Populate $S3_URI, then run: forge-sync-memory $PRODUCT
+  3) In any Claude Code session: /forge $PRODUCT
+EOF

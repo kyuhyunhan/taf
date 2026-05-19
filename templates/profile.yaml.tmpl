@@ -1,0 +1,40 @@
+# Forge profile — single source of truth for this forge.
+# Lives at ~/.taf/forges/{{product}}/profile.yaml.
+
+product: {{product}}
+master_agent: {{product}}-master
+
+# Absolute path to the product source. The master reads this freely
+# and proposes edits as patches; the user applies them.
+workdir: {{workdir}}
+
+memory:
+  # Default: memory is git-tracked under taf/forges/{{product}}/memory/.
+  # Other machines pull via `git pull` on the taf repo.
+  # Switch sync_mode to `pull-only` and set s3_uri to use S3 as SoT instead.
+  s3_uri: {{s3_uri}}    # leave blank for git mode; e.g. s3://taf-mem-yourname/{{product}}/
+  local: ./memory/      # relative to this forge directory
+  sync_mode: git        # values: git | pull-only
+
+skill_applicability:
+  # tas skills whose frontmatter `applicability:` tag matches one of
+  # these are visible to the master. Globs supported.
+  # See: ta-set/taf/policy/skill-applicability.md
+  include: []
+    # - swift-*
+    # - apple-*
+    # - coding-standards
+    # - code-review
+    # - simplify
+  exclude: []
+
+allowed_subagents:
+  # Journeymen from taa that this master may delegate to via Task.
+  # Each name MUST exist in taa (~/.claude/agents/<name>.md).
+  # The forge does not define new personas — surface gaps as
+  # taa-level changes, not forge-level ones.
+  []
+    # - swift-developer
+    # - swift-test-writer
+    # - code-reviewer
+    # - explorer

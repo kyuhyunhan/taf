@@ -1,0 +1,176 @@
+id: maintain-loop
+name: Maintain Loop — Plan → Implement → Test → Review → Memory → Commit
+description: |
+  The default entry point for any non-trivial Lexio change (feature, fix,
+  refactor, deploy). Phases are executed in order. A phase MUST NOT start
+  before all its `pre_gates` pass, and MUST emit all its `post_gates`
+  before the next phase starts. `when` conditions are evaluated against
+  the declared plan variables (server_changes, client_changes).
+
+variables:
+  server_changes:
+    type: string
+    description: Files to be modified under server/, or the literal "none".
+    must_declare_in: plan
+  client_changes:
+    type: string
+    description: Files to be modified under Lexio/, or the literal "none".
+    must_declare_in: plan
+
+phases:
+
+  - id: plan
+    name: Plan
+    type: plan-mode
+    required: true
+    requires_approval: true
+    procedure:
+      - Enter plan mode via EnterPlanMode (handled by harness when user enters plan mode explicitly).
+      - Use Explore agent for unknown territory; Plan agent for design.
+      - Plan document MUST declare server_changes and client_changes (use the literal "none" if a side has no changes).
+      - Exit plan mode via ExitPlanMode for user approval.
+    post_gates: []
+
+  - id: implement-server
+    name: Implement Server
+    type: agent
+    agent: developer-server
+    agent_required: true   # M1: production server code MUST go through the named agent (not direct Edit/Write by the master).
+    when: server_changes != "none"
+    procedure:
+      - Modify files declared in plan.server_changes.
+      - Do NOT edit samconfig.toml / template.yaml / serverless.yml unless the user confirmed the change belongs in config (hard rule r-source-not-config).
+    post_gates: [server-typecheck, server-tests]
+
+  - id: implement-client
+    name: Implement Client
+    type: agent
+    agent: developer-client
+    agent_required: true   # M1: production client code MUST go through the named agent (not direct Edit/Write by the master).
+    when: client_changes != "none"
+    procedure:
+      - Modify files declared in plan.client_changes.
+      - Respect L0 → all, L1 → L2/L3, L2 → L3. No reverse imports.
+      - Sensitive data → Keychain. API keys → server only. (hard rules)
+    post_gates: [build, architecture]
+
+  - id: write-tests-client
+    name: Write Tests (Client)
+    type: agent
+    agent: developer-client
+    agent_required: true   # M1: test authoring MUST go through developer-client to keep red/green discipline.
+    when: client_changes != "none"
+    procedure:
+      - Add/update tests under LexioTests/ for new ViewModel/service behavior.
+      - Add/update tests under LexioUITests/ for new user-facing flows.
+      - Use Swift Testing (`import Testing`) for new files; XCTest only if extending existing XCTest files.
+    post_gates: [unit]
+
+  - id: review
+    name: Review
+    type: agent
+    agent: reviewer
+    required: true
+    procedure:
+      - Pass the diff (git diff HEAD or staged) to the agent.
+      - Findings categorized [MUST] / [SHOULD] / [NIT] / [PRAISE].
+      - Apply all [MUST] findings before commit. Apply [SHOULD] findings unless the user explicitly defers them.
+    post_gates: []
+
+  - id: memory-update
+    name: Memory Update (optional)
+    type: skill
+    skill: forge-memory
+    when: a durable fact (decision, non-obvious observation, fix lesson, milestone) emerged during the work
+    requires_draft_approval: true
+    procedure:
+      - Classify into client / server / cross-cutting / product.
+      - Draft using the format in workflows/docs.yaml.
+      - Show draft to user for sign-off BEFORE writing (memory README discipline).
+      - Append-only — never edit an existing note's body, frontmatter, or status.
+
+  - id: deploy-server
+    name: Deploy Server
+    type: action
+    when: server_changes != "none" AND user requests deployment
+    procedure:
+      - Run `cd server && npm run deploy:dev`.
+      - Confirm CloudFormation changeset created.
+      - Smoke-invoke Lambda directly (see references).
+    post_gates: []
+
+  - id: release-client
+    name: Release Client (bump → quit → build → install → relaunch → verify)
+    type: action
+    when: client_changes != "none" AND user requests release build
+    description: |
+      Closes the loop from "code committed" to "user is running the new binary".
+      Skipping this phase is the failure mode that originally motivated its
+      introduction: a feature commit (7aec7ba) shipped to master but
+      /Applications/Lexio.app stayed on the previous MARKETING_VERSION for
+      months because no install step ran. Encode every mechanical step here
+      so it cannot be silently dropped.
+    procedure:
+      - >-
+        Bump MARKETING_VERSION in Lexio.xcodeproj/project.pbxproj (patch +1).
+        Verify all configurations updated
+        (grep -c 'MARKETING_VERSION = <new>;' should equal the prior count).
+      - >-
+        Stage and commit the bump separately as
+        'chore: Bump version to <X.Y.Z>'. Keep it isolated from the feature
+        commit so version history is grep-able.
+      - >-
+        Run './scripts/build-release.sh --relaunch' from the workdir.
+        The script performs atomically —
+        (a) clean Release build via xcodebuild;
+        (b) graceful quit of any running Lexio (osascript then pkill fallback,
+        5s timeout per stage);
+        (c) /Applications/Lexio.app replacement plus xattr -cr;
+        (d) installed CFBundleShortVersionString check against built version;
+        (e) open the installed app and confirm PID.
+      - >-
+        If the script reports a version mismatch or launch failure, halt.
+        Do NOT mark the workflow complete.
+    post_gates: [release-installed]
+
+  - id: commit
+    name: Commit
+    type: action
+    required: true
+    procedure:
+      - Stage explicit file paths (never `git add -A` / `git add .`).
+      - Conventional commit prefix: feat / fix / chore / refactor / docs / test.
+      - HEREDOC commit message. Include Co-Authored-By trailer.
+      - Forbidden flags: --no-verify, --amend (unless user explicitly requests).
+    post_gates: [git-clean-status]
+
+  - id: verify
+    name: Verify (final checklist)
+    type: checklist
+    required: true
+    items:
+      - Server changes (if any): Lambda smoke-invoke passes
+      - Client changes (if any): LexioTests passes
+      - Client changes (if any): LexioUITests passes (when UI changed)
+      - Client release (if applicable): release-installed gate passed (installed version == MARKETING_VERSION, process running)
+      - All commits landed
+      - "`git status` clean of unintended modifications"
+    # Automated portion of the checklist — wired so `phase-advance.sh verify`
+    # actually runs the machine-checkable items rather than treating verify as
+    # a vacuous pass (diagnostic L-5). Items above remain as human-readable
+    # documentation; the post_gates below are the machine contract.
+    #
+    # release-installed: see scripts/gates/release-installed.sh for the
+    # false-positive cases and the LEXIO_SKIP_RELEASE_GATE=1 escape hatch.
+    # This is the L-3 enforcement point: client changed + version bumped +
+    # release skipped ⇒ verify fails.
+    post_gates: [build, unit, architecture, git-clean-status, release-installed]
+
+references:
+  - $forge_root/memory/cross-cutting/20260507T1220-swift-workflow.md
+  - server smoke-invoke payload: see scripts/lambda-smoke.sh (if present) or fallback to inline aws-cli call
+
+skip_rules:
+  - When plan.server_changes == "none": skip phases implement-server, deploy-server.
+  - When plan.client_changes == "none": skip phases implement-client, write-tests-client, release-client.
+  - When user explicitly defers a release: skip deploy-server / release-client but keep commit + verify.

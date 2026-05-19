@@ -1,0 +1,77 @@
+# Lexio Gates
+#
+# A gate is an executable check with a pass criterion. Workflow phases
+# reference gates by id under pre_gates / post_gates. A failed gate
+# halts the workflow — the next phase MUST NOT start.
+
+gates:
+
+  build:
+    description: Lexio client builds with no compilation errors.
+    # arch=arm64 is REQUIRED: `platform=macOS` alone picks the first matching
+    # destination, which on this machine resolves to x86_64 and fails. The
+    # `-quiet` flag was previously here but it suppresses the "BUILD
+    # SUCCEEDED" line on which `pass_pattern` depends — keep verbose output
+    # so the gate decision matches xcodebuild reality. See diagnostic I-2.
+    command: xcodebuild build -scheme Lexio -destination 'platform=macOS,arch=arm64'
+    cwd: ${WORKDIR}
+    pass_pattern: "BUILD SUCCEEDED"
+    fail_pattern: "BUILD FAILED|error:"
+    timeout_seconds: 180
+
+  unit:
+    description: LexioTests passes (Swift Testing + XCTest).
+    command: xcodebuild test -scheme Lexio -destination 'platform=macOS,arch=arm64' -only-testing:LexioTests
+    cwd: ${WORKDIR}
+    pass_pattern: "TEST SUCCEEDED"
+    fail_pattern: "TEST FAILED|error:"
+    timeout_seconds: 240
+
+  ui:
+    description: LexioUITests passes. Optional — only required when UI surface changes.
+    command: xcodebuild test -scheme Lexio -destination 'platform=macOS,arch=arm64' -only-testing:LexioUITests
+    cwd: ${WORKDIR}
+    pass_pattern: "TEST SUCCEEDED"
+    fail_pattern: "TEST FAILED|error:"
+    timeout_seconds: 360
+    optional: true
+
+  architecture:
+    description: No reverse imports across L0–L3 layers.
+    script: scripts/gates/architecture.sh
+    cwd: $TAF_ROOT/forges/lexio/.claude
+    pass_exit_code: 0
+    timeout_seconds: 30
+
+  server-typecheck:
+    description: server/ TypeScript compiles without errors.
+    command: npx tsc --noEmit
+    cwd: ${WORKDIR}/server
+    pass_exit_code: 0
+    timeout_seconds: 120
+    optional: true
+
+  server-tests:
+    description: server/ unit tests pass.
+    command: npm test
+    cwd: ${WORKDIR}/server
+    pass_exit_code: 0
+    timeout_seconds: 240
+    optional: true
+
+  git-clean-status:
+    description: git status is clean of unintended modifications.
+    command: git status --porcelain | wc -l | awk '{ if ($1 == "0") exit 0; else exit 1 }'
+    cwd: ${WORKDIR}
+    pass_exit_code: 0
+    timeout_seconds: 10
+
+  release-installed:
+    description: |
+      /Applications/Lexio.app exists, its CFBundleShortVersionString equals
+      MARKETING_VERSION in project.pbxproj, and the Lexio process is running.
+      Closes the loop from "git commit" to "user actually runs the new binary".
+    script: scripts/gates/release-installed.sh
+    cwd: $TAF_ROOT/forges/lexio/.claude
+    pass_exit_code: 0
+    timeout_seconds: 15

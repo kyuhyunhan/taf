@@ -1,0 +1,13 @@
+id: C-007
+title: Client routes ⌘C events to server /analyze endpoint
+source_commit: e8309ce
+layer: client
+trigger: |
+  User performs ⌘C while Lexio is running and has accessibility
+  permission. ClipboardWatcher captures the selection.
+effect: |
+  Client issues POST /analyze with { text, source_lang, target_lang,
+  license_key }. The response is routed to the overlay view.
+boundary: |
+  Network failure surfaces an "offline" overlay state with retry
+  affordance — never crashes. Timeout is bounded.

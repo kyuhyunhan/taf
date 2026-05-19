@@ -1,0 +1,14 @@
+id: C-013
+title: Drag selection extracts text via AX; falls back to Vision OCR
+source_commit: 6192cc4
+layer: client
+trigger: |
+  User performs a drag-selection gesture defining a screen
+  rectangle.
+effect: |
+  Pipeline: (a) Accessibility API extracts text from the selected
+  region. (b) If AX yields empty/whitespace, capture the rectangle
+  as image and run Vision OCR.
+boundary: |
+  If OCR confidence falls below threshold, the overlay shows
+  "no text detected" rather than producing a low-quality result.

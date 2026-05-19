@@ -1,0 +1,48 @@
+# Forge profile — single source of truth for the lexio forge.
+# Lives at $TAF_ROOT/forges/lexio/profile.yaml.
+
+product: lexio
+
+# Absolute path to the product source. Resolved at session start from
+# the $WORKDIR env var (set in settings.local.json — see
+# settings.local.json.example). The master reads this freely and
+# proposes edits as patches; the user applies them.
+workdir: ${WORKDIR}
+
+# Authoritative location for product-private overlay (memory, holds
+# entries, profile.local.yaml). Default convention is
+# $TAF_ROOT/../private/forges/lexio. Tools that need overlay paths
+# read this field via taf/runtime/scripts/profile-loader.sh.
+private_root: ${PRIVATE_ROOT:-${TAF_ROOT}/../private/forges/lexio}
+
+memory:
+  # Lexio memory is tracked under taf/forges/lexio/memory/ in git.
+  # `sync_mode: git` makes forge-sync-memory a no-op (just emits a note).
+  # S3 is no longer the SoT; if a bucket is connected later, decide
+  # whether it becomes a backup channel or a parallel SoT.
+  s3_uri:
+  local: ./memory/
+  sync_mode: git
+
+skill_applicability:
+  # tas skills whose frontmatter `applicability:` tag matches one of
+  # these are visible to the master. Globs supported.
+  # Lexio is Apple Swift app + AWS Serverless backend.
+  include:
+    - ref-swift-*
+    - ref-apple-*
+    - ref-aws-*
+    - ref-code-standards
+    - ref-code-review
+    - simplify
+  exclude: []
+
+allowed_subagents:
+  # Generic taa personas this forge may delegate to.
+  # Stack-bound aliases (developer-client, developer-server) are
+  # declared in .claude/resolve/agents.yaml#allowed; this list is the
+  # underlying base-persona set that those aliases reference.
+  - developer
+  - reviewer
+  - strategist
+  - architect
