@@ -245,7 +245,7 @@ axes:
           3: "+ deployed to AWS + SNS subscription wired"
 
       - id: G3-C7
-        title: .claude/resolve/contracts/<feature-id>.yaml per shipped feature (trigger/effect/boundary)
+        title: $PRIVATE_ROOT/contracts/<feature-id>.yaml per shipped feature (trigger/effect/boundary). Schema in .claude/resolve/contracts/README.md.
         check:
           mode: auto
           command: ".claude/scripts/audit-checks/g3-c7-contracts-coverage.sh"

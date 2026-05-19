@@ -30,6 +30,9 @@ while IFS= read -r path; do
     forges/*/.claude/holds.yaml)
       FORBIDDEN+=("${path}  (holds entries — use holds.schema.yaml for schema)")
       ;;
+    forges/*/.claude/resolve/contracts/C-*.yaml)
+      FORBIDDEN+=("${path}  (contract instance — product IP; lives in \$PRIVATE_ROOT/contracts/)")
+      ;;
     forges/*/profile.local.yaml)
       FORBIDDEN+=("${path}  (machine-local profile override)")
       ;;

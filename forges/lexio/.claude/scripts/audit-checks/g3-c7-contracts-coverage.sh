@@ -26,7 +26,10 @@ set -uo pipefail
 
 FORGE_ROOT="${FORGE_ROOT:-$(cd "$(dirname "$0")/../../.." && pwd)}"
 : "${WORKDIR:?WORKDIR must be set (see settings.local.json.example)}"
-CONTRACTS_DIR="$FORGE_ROOT/.claude/resolve/contracts"
+: "${PRIVATE_ROOT:?PRIVATE_ROOT must be set (see settings.local.json.example)}"
+# Contract instances live in the private overlay (T3 product state);
+# schema/README stays public at $FORGE_ROOT/.claude/resolve/contracts/README.md
+CONTRACTS_DIR="$PRIVATE_ROOT/contracts"
 
 # Level 0 — directory absent or empty
 if [ ! -d "$CONTRACTS_DIR" ]; then

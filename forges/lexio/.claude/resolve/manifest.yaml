@@ -252,12 +252,17 @@ scope_classification:
   - path: .claude/resolve/contracts/README.md
     scope: universal
     visibility: public
+    note: Schema and conventions for feature contracts. Instances live in $PRIVATE_ROOT/contracts/.
 
   - path: .claude/resolve/contracts/
-    scope: stack-bound
-    visibility: public
+    scope: product
+    visibility: private
     glob: "C-*.yaml"
-    note: 16 feature contracts. Methodology universal; content stack-bound.
+    note: |
+      Contract instances are the complete product feature catalog —
+      treated as T3 product state. Live in $PRIVATE_ROOT/contracts/
+      (gitignored from public taf). Pattern mirrors the holds.yaml
+      schema/data split.
 
   - path: .claude/scripts/gates/architecture.sh
     scope: stack-bound
